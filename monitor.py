@@ -4,7 +4,7 @@ import subprocess
 import logging
 
 # Configuration
-WATCH_DIRECTORY = "PodcastsFiles"
+WATCH_DIRECTORY = os.environ.get("WATCH_DIRECTORY", "PodcastsFiles")
 PROCESSED_LOG = "processed_files.log"
 POLL_INTERVAL = 10  # Seconds
 
