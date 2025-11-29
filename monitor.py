@@ -55,9 +55,10 @@ def process_file(filepath):
     # Construct command
     # python main.py --file "path/to/file" --mode PODCAST --speakers "Speaker1" "Speaker2"
     
-    import sys
+    # Use the specific python interpreter that has the dependencies installed
+    python_path = "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
     cmd = [
-        sys.executable, "main.py",
+        python_path, "main.py",
         "--file", filepath,
         "--mode", "PODCAST",
         "--speakers"
