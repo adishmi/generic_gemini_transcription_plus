@@ -81,6 +81,18 @@ def monitor():
         logging.error(f"Directory {WATCH_DIRECTORY} does not exist.")
         return
 
+    # Initial scan to mark existing files as processed (to avoid processing old files)
+    logging.info("Performing initial scan to ignore existing files...")
+    for root, dirs, files in os.walk(WATCH_DIRECTORY):
+        for file in files:
+            if "final" in file.lower() and file.lower().endswith(".mp3"):
+                if file not in processed_files:
+                    logging.info(f"Marking existing file as processed: {file}")
+                    processed_files.add(file)
+                    save_processed_file(file) # Optional: save to log so we remember them across restarts
+
+    logging.info("Initial scan complete. Monitoring for new files...")
+
     while True:
         try:
             # Recursive scan using os.walk
