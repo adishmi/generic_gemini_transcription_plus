@@ -83,30 +83,22 @@ def monitor():
 
     while True:
         try:
-            # List all files in directory
-            files = os.listdir(WATCH_DIRECTORY)
-            
-            for file in files:
-                filepath = os.path.join(WATCH_DIRECTORY, file)
-                
-                # Check if it's a file and not a directory
-                if not os.path.isfile(filepath):
-                    continue
-                
-                # Check for "Final" (case-insensitive) and mp3 extension (optional, but good practice)
-                if "final" in file.lower() and file.lower().endswith(".mp3"):
-                    if file not in processed_files:
-                        # Check if file is not empty
-                        if os.path.getsize(filepath) == 0:
-                            logging.warning(f"File {filename} is empty. Skipping.")
-                            continue
+            # Recursive scan using os.walk
+            for root, dirs, files in os.walk(WATCH_DIRECTORY):
+                for file in files:
+                    filepath = os.path.join(root, file)
+                    
+                    # Check for "Final" (case-insensitive) and mp3 extension
+                    if "final" in file.lower() and file.lower().endswith(".mp3"):
+                        if file not in processed_files:
+                            # Check if file is not empty
+                            if os.path.getsize(filepath) == 0:
+                                logging.warning(f"File {file} is empty. Skipping.")
+                                continue
 
-                        # Double check if file is fully written (simple check: size stable?)
-                        # For now, we assume if it's there it's ready, or we can wait a bit.
-                        # A simple way is to just try processing.
-                        
-                        process_file(filepath)
-                        processed_files.add(file)
+                            # Process the file
+                            process_file(filepath)
+                            processed_files.add(file)
             
             time.sleep(POLL_INTERVAL)
             

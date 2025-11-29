@@ -12,13 +12,13 @@ import sys
 
 # --- General Variables ---
 # Best practice: store your API key in an environment variable
-try:
-    api_key = "AIzaSyCljZ5ELClQfuLSX62ux_myAZxPgL76Cvk"
-    client = genai.Client(api_key=api_key)
-except KeyError:
+api_key = os.environ.get("GOOGLE_API_KEY")
+if not api_key:
     print("Error: GOOGLE_API_KEY environment variable not set.")
     print("Please set it by running 'export GOOGLE_API_KEY=\"YOUR_API_KEY\"' in your terminal.")
-    exit()
+    sys.exit(1)
+
+client = genai.Client(api_key=api_key)
 
 # --- Helper Functions ---
 
