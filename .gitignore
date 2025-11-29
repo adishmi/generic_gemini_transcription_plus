@@ -1,0 +1,5 @@
+__pycache__/
+*.mp3
+processed_files.log
+monitor.log
+.DS_Store
