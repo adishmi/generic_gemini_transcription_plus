@@ -25,6 +25,8 @@
         <string>AIzaSyCljZ5ELClQfuLSX62ux_myAZxPgL76Cvk</string>
         <key>WATCH_DIRECTORY</key>
         <string>/Users/adishmitanka/Content/Podcasts</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
 </dict>
 </plist>
