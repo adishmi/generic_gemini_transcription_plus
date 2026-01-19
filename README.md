@@ -1,6 +1,13 @@
 # Gemini Transcribe - Podcast Automation
 
-This tool automates the process of transcribing audio files using Google Gemini. It can also generate summaries, LinkedIn posts, and episode descriptions.
+`Gemini Transcribe` is an automated workflow designed for content creators and podcasters. It leverages the power of Google Gemini to transform raw audio into ready-to-publish assets.
+
+The repository listens for new audio files in your specified directories and automatically:
+- **Transcribes** audio with high accuracy (supports long files via smart splitting).
+- **Identifies Speakers** based on your specific podcast or workshop setup.
+- **Generates Marketing Assets**: Including LinkedIn posts, episode summaries, and SEO-friendly podcast descriptions with timestamps.
+
+Whether you're running a solo show or hosting workshops, this tool handles the heavy lifting of post-production documentation so you can focus on the content.
 
 ## Setup
 
