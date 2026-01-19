@@ -27,7 +27,8 @@ def main():
     # Reuse the process_file function from monitor.py
     # This handles speaker detection and calling main.py
     try:
-        process_file(filepath)
+        # Default to PODCAST mode for manual runs, monitor's process_file handles the Draft check
+        process_file(filepath, mode="PODCAST")
         print("Manual processing completed successfully.")
     except Exception as e:
         print(f"Error during processing: {e}")

@@ -9,6 +9,9 @@ import re
 
 import argparse
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- General Variables ---
 # Best practice: store your API key in an environment variable
@@ -139,7 +142,7 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, mode=
     print(f"--- Starting Transcription for {podcast_path} (Mode: {mode}) ---")
     
     try:
-        audio = AudioSegment.from_mp3(podcast_path)
+        audio = AudioSegment.from_file(podcast_path)
     except Exception as e:
         print(f"Error loading audio file: {e}")
         raise
@@ -160,7 +163,10 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, mode=
             end_ms = min((i + 1) * CHUNK_LENGTH_MS, duration_ms)
             
             chunk = audio[start_ms:end_ms]
-            chunk_filename = f"{podcast_path.rsplit('.', 1)[0]}_part{i+1}.mp3"
+            # Determine the Transcriptions directory from the output_path
+            transcriptions_dir = os.path.dirname(output_path)
+            base_filename = os.path.splitext(os.path.basename(podcast_path))[0]
+            chunk_filename = os.path.join(transcriptions_dir, f"{base_filename}_part{i+1}.mp3")
             print(f"Exporting chunk {i+1}/{num_chunks}: {chunk_filename}...")
             chunk.export(chunk_filename, format="mp3")
             
@@ -306,6 +312,7 @@ if __name__ == "__main__":
     parser.add_argument("--file", required=True, help="Path to the input audio file")
     parser.add_argument("--mode", default="PODCAST", choices=["PODCAST", "WORKSHOP"], help="Processing mode")
     parser.add_argument("--speakers", nargs="+", default=[], help="List of speakers")
+    parser.add_argument("--transcribe-only", action="store_true", help="Only transcribe the audio, skip generation tasks")
     
     args = parser.parse_args()
     
@@ -313,12 +320,19 @@ if __name__ == "__main__":
     PODCAST_FILE_PATH = args.file
     MODE = args.mode
     SPEAKERS = args.speakers
+    TRANSCRIBE_ONLY = args.transcribe_only
     
     # Model
-    MODEL = "gemini-2.5-pro"
+    MODEL = "gemini-3-flash-preview"
     
     # Output paths derived from input filename
-    base_name = os.path.splitext(PODCAST_FILE_PATH)[0]
+    directory = os.path.dirname(PODCAST_FILE_PATH)
+    filename_no_ext = os.path.splitext(os.path.basename(PODCAST_FILE_PATH))[0]
+    
+    transcriptions_dir = os.path.join(directory, "Transcriptions")
+    os.makedirs(transcriptions_dir, exist_ok=True)
+    
+    base_name = os.path.join(transcriptions_dir, filename_no_ext)
     TRANSCRIPT_FILE_PATH = f"{base_name}_Transcription.txt"
     LINKEDIN_POST_PATH = f"{base_name}_Linkedin.txt"
     DESCRIPTION_PATH = f"{base_name}_Description.txt"
@@ -328,29 +342,23 @@ if __name__ == "__main__":
     transcript_path = transcribe_audio(PODCAST_FILE_PATH, SPEAKERS, MODEL, TRANSCRIPT_FILE_PATH, mode=MODE)
 
     if transcript_path:
-        # 2. Generate LinkedIn post from the transcript
-        generate_linkedin_post(transcript_path, MODEL, LINKEDIN_POST_PATH)
-        
-        # 3. Generate episode description from the transcript
-        # Ensure we have at least 2 speakers for the description prompt logic if needed, or handle gracefully
-        # The prompt uses speakers_list[1] and speakers_list[0], so we need at least 2 speakers for that specific prompt logic.
-        # If it's a solo episode, we might need to adjust the prompt or just pass the list as is and hope the model handles it / or just pass "Adi" twice if needed.
-        # For now, passing the list.
-        if len(SPEAKERS) >= 2:
-             generate_description(transcript_path, SPEAKERS, MODEL, DESCRIPTION_PATH)
-        else:
-             # Fallback or just run it, maybe the model is smart enough or we duplicate
-             # Let's just run it, but maybe warn or duplicate if strictly needed by the f-string in generate_description
-             # The f-string is: questions {speakers_list[1]} asks {speakers_list[0]}
-             # If solo, this will crash.
-             if len(SPEAKERS) == 1:
-                 # Mock a second speaker or just use the same name to prevent crash
-                 generate_description(transcript_path, [SPEAKERS[0], "Audience"], MODEL, DESCRIPTION_PATH)
-             else:
-                 # Should not happen if speakers list is empty, but let's handle empty
-                 generate_description(transcript_path, ["Host", "Guest"], MODEL, DESCRIPTION_PATH)
+        if TRANSCRIBE_ONLY:
+            print("--- Transcribe-only mode: skipping post-generation tasks. ---")
+        elif MODE == "PODCAST":
+            # 2. Generate LinkedIn post from the transcript
+            generate_linkedin_post(transcript_path, MODEL, LINKEDIN_POST_PATH)
+            
+            # 3. Generate episode description from the transcript
+            # Ensure we have at least 2 speakers for the description prompt logic if needed, or handle gracefully
+            if len(SPEAKERS) >= 2:
+                 generate_description(transcript_path, SPEAKERS, MODEL, DESCRIPTION_PATH)
+            else:
+                 if len(SPEAKERS) == 1:
+                     generate_description(transcript_path, [SPEAKERS[0], "Audience"], MODEL, DESCRIPTION_PATH)
+                 else:
+                     generate_description(transcript_path, ["Host", "Guest"], MODEL, DESCRIPTION_PATH)
 
-        # 4. Generate transcript summary from the transcript
-        generate_summary(transcript_path, SPEAKERS, MODEL, SUMMARY_PATH)
+            # 4. Generate transcript summary from the transcript
+            generate_summary(transcript_path, SPEAKERS, MODEL, SUMMARY_PATH)
         
         print("--- All tasks completed. ---")

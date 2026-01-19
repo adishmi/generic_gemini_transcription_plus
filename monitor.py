@@ -2,9 +2,24 @@ import os
 import time
 import subprocess
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Configuration
-WATCH_DIRECTORY = os.environ.get("WATCH_DIRECTORY", "PodcastsFiles")
+WATCH_CONFIGS = [
+    {
+        "directory": "/Users/adishmitanka/Content/LongForm/נקודה למחשבה",
+        "filter_word": "final",
+        "mode": "PODCAST"
+    },
+    {
+        "directory": "/Users/adishmitanka/Content/LongForm/Workshops",
+        "filter_word": "workshop",
+        "mode": "WORKSHOP"
+    }
+]
+
 PROCESSED_LOG = "processed_files.log"
 POLL_INTERVAL = 10  # Seconds
 
@@ -28,11 +43,15 @@ def save_processed_file(filename):
     with open(PROCESSED_LOG, "a") as f:
         f.write(filename + "\n")
 
-def get_speakers(filename):
+def get_speakers(filename, mode):
     # Logic:
+    # If WORKSHOP mode -> ["Adi", "Speaker 1", "Speaker 2"]
     # If "Solo" in filename -> ["Adi"]
     # Else -> [First Word of Filename, "Adi"]
     
+    if mode == "WORKSHOP":
+        return ["Adi", "Speaker 1", "Speaker 2"]
+        
     base_name = os.path.basename(filename)
     name_without_ext = os.path.splitext(base_name)[0]
     
@@ -45,12 +64,15 @@ def get_speakers(filename):
         first_word = name_without_ext.replace("_", " ").split(" ")[0]
         return [first_word, "Adi"]
 
-def process_file(filepath):
+def process_file(filepath, mode):
     filename = os.path.basename(filepath)
-    logging.info(f"Processing new file: {filename}")
+    logging.info(f"Processing new file ({mode}): {filename}")
     
-    speakers = get_speakers(filename)
+    speakers = get_speakers(filename, mode)
     logging.info(f"Identified speakers: {speakers}")
+    
+    # Check if it's a draft
+    is_draft = "draft" in filename.lower()
     
     # Construct command
     # python main.py --file "path/to/file" --mode PODCAST --speakers "Speaker1" "Speaker2"
@@ -60,9 +82,13 @@ def process_file(filepath):
     cmd = [
         python_path, "main.py",
         "--file", filepath,
-        "--mode", "PODCAST",
+        "--mode", mode,
         "--speakers"
     ] + speakers
+    
+    if is_draft:
+        cmd.append("--transcribe-only")
+        logging.info("Detected DRAFT file - setting transcribe-only mode")
     
     logging.info(f"Running command: {' '.join(cmd)}")
     
@@ -74,44 +100,42 @@ def process_file(filepath):
         logging.error(f"Error processing {filename}: {e}")
 
 def monitor():
-    logging.info(f"Starting monitor on directory: {os.path.abspath(WATCH_DIRECTORY)}")
     processed_files = load_processed_files()
     
-    # Ensure watch directory exists
-    if not os.path.exists(WATCH_DIRECTORY):
-        logging.error(f"Directory {WATCH_DIRECTORY} does not exist.")
+    # Validation
+    valid_configs = []
+    for config in WATCH_CONFIGS:
+        if os.path.exists(config["directory"]):
+            logging.info(f"Monitoring folder: {config['directory']} (Mode: {config['mode']}, Filter: {config['filter_word']})")
+            valid_configs.append(config)
+        else:
+            logging.error(f"Directory {config['directory']} does not exist. Skipping.")
+    
+    if not valid_configs:
+        logging.error("No valid watch directories found. Exiting.")
         return
 
-    # Initial scan to mark existing files as processed (to avoid processing old files)
-    logging.info("Performing initial scan to ignore existing files...")
-    for root, dirs, files in os.walk(WATCH_DIRECTORY):
-        for file in files:
-            if "final" in file.lower() and file.lower().endswith(".mp3"):
-                if file not in processed_files:
-                    logging.info(f"Marking existing file as processed: {file}")
-                    processed_files.add(file)
-                    save_processed_file(file) # Optional: save to log so we remember them across restarts
-
-    logging.info("Initial scan complete. Monitoring for new files...")
+    logging.info("Monitoring for new files...")
 
     while True:
         try:
-            # Recursive scan using os.walk
-            for root, dirs, files in os.walk(WATCH_DIRECTORY):
-                for file in files:
-                    filepath = os.path.join(root, file)
-                    
-                    # Check for "Final" (case-insensitive) and mp3 extension
-                    if "final" in file.lower() and file.lower().endswith(".mp3"):
-                        if file not in processed_files:
-                            # Check if file is not empty
-                            if os.path.getsize(filepath) == 0:
-                                logging.warning(f"File {file} is empty. Skipping.")
-                                continue
+            for config in valid_configs:
+                for root, dirs, files in os.walk(config["directory"]):
+                    for file in files:
+                        filepath = os.path.join(root, file)
+                        ext = os.path.splitext(file)[1].lower()
+                        
+                        # Add 'draft' to the filter check
+                        is_target = config["filter_word"] in file.lower() or "draft" in file.lower()
+                        
+                        if is_target and ext in [".mp3", ".m4a", ".wav", ".flac"]:
+                            if file not in processed_files:
+                                if os.path.getsize(filepath) == 0:
+                                    logging.warning(f"File {file} is empty. Skipping.")
+                                    continue
 
-                            # Process the file
-                            process_file(filepath)
-                            processed_files.add(file)
+                                process_file(filepath, config["mode"])
+                                processed_files.add(file)
             
             time.sleep(POLL_INTERVAL)
             
