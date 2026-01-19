@@ -1,0 +1,4 @@
+2026-01-19 16:25:44,603 - INFO - Monitoring for new files...
+2026-01-19 16:25:44,604 - INFO - Processing new file: Solo_Optimization_Paradox_Final copy 2.mp3 | Mode: Podcast | Actions: ['transcribe_podcast', 'summary', 'linkedin', 'description']
+2026-01-19 16:25:44,604 - INFO - Identified speakers: ['Adi']
+2026-01-19 16:25:44,604 - INFO - Running command: /Library/Frameworks/Python.framework/Versions/3.13/bin/python3 main.py --file /Users/adishmitanka/Content/LongForm/נקודה למחשבה/סולו - פרדוקס אופטימיזציה/Solo_Optimization_Paradox_Final copy 2.mp3 --mode Podcast --speakers Adi --actions transcribe_podcast summary linkedin description

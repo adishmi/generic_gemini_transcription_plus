@@ -9,6 +9,7 @@ import re
 
 import argparse
 import sys
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -43,35 +44,28 @@ def _extract_text_from_response(response):
         return ""
 
 
-def _transcribe_segment(file_path, speakers_list, model_name, mode="PODCAST"):
+
+# Validates that JSON is valid
+def load_config():
+    try:
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        with open(config_path, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Warning: Could not load config.json: {e}")
+        return {}
+
+CONFIG = load_config()
+
+def get_prompt(key, default_prompt):
+    return CONFIG.get("prompts", {}).get(key, default_prompt)
+
+def _transcribe_segment(file_path, speakers_list, model_name, prompt_key="transcription_podcast"):
     """Helper function to transcribe a single audio file."""
     print(f"Uploading file {file_path}...")
     podcast_file = client.files.upload(file=file_path)
 
-    if mode == "WORKSHOP":
-        prompt_template = Template("""Generate a transcript of the workshop. The audio is in Hebrew. Include timestamps and identify speakers.
-The main speaker is HOST. Identify other speakers as SPEAKER_1, SPEAKER_2, etc.
-eg:
-[00:00] HOST: Welcome everyone.
-[00:05] SPEAKER_1: I have a question.
-[00:10] HOST: Go ahead.
-
-If there is music or a short jingle playing, signify like so:
-[01:02] [MUSIC] or [01:02] [JINGLE]
-If you can identify the name of the music or jingle playing then use that instead, eg:
-[01:02] [Firework by Katy Perry] or [01:02] [The Sofa Shop jingle]
-If there is some other sound playing try to identify the sound, eg:
-[01:02] [Bell ringing]
-Each individual caption should be quite short, a few short sentences at most.
-Signify the end of the episode with [END].
-Don't use any markdown formatting, like bolding or italics.
-Only use characters from the Hebrew alphabet, unless you genuinely believe foreign characters are correct.
-It is important that you use the correct words and spell everything correctly. Use the context to help.
-""")
-        prompt = prompt_template.render()
-
-    else: # PODCAST mode
-        prompt_template = Template("""Generate a transcript of the episode. The episode is in Hebrew. Include timestamps and identify speakers.
+    default_prompt_podcast = """Generate a transcript of the episode. The episode is in Hebrew. Include timestamps and identify speakers.
 Speakers are: 
 {% for speaker in speakers %}- {{ speaker }}{% if not loop.last %}\\n{% endif %}{% endfor %}
 eg:
@@ -89,8 +83,38 @@ Signify the end of the episode with [END].
 Don't use any markdown formatting, like bolding or italics.
 Only use characters from the Hebrew alphabet, unless you genuinely believe foreign characters are correct.
 It is important that you use the correct words and spell everything correctly. Use the context of the podcast to help.
-If the hosts discuss something like a movie, book or celebrity, make sure the movie, book, or celebrity name is spelled correctly.""")
-        
+If the hosts discuss something like a movie, book or celebrity, make sure the movie, book, or celebrity name is spelled correctly."""
+
+    default_prompt_workshop = """Generate a transcript of the workshop. The audio is in Hebrew. Include timestamps and identify speakers.
+The main speaker is HOST. Identify other speakers as SPEAKER_1, SPEAKER_2, etc.
+eg:
+[00:00] HOST: Welcome everyone.
+[00:05] SPEAKER_1: I have a question.
+[00:10] HOST: Go ahead.
+
+If there is music or a short jingle playing, signify like so:
+[01:02] [MUSIC] or [01:02] [JINGLE]
+If you can identify the name of the music or jingle playing then use that instead, eg:
+[01:02] [Firework by Katy Perry] or [01:02] [The Sofa Shop jingle]
+If there is some other sound playing try to identify the sound, eg:
+[01:02] [Bell ringing]
+Each individual caption should be quite short, a few short sentences at most.
+Signify the end of the episode with [END].
+Don't use any markdown formatting, like bolding or italics.
+Only use characters from the Hebrew alphabet, unless you genuinely believe foreign characters are correct.
+It is important that you use the correct words and spell everything correctly. Use the context to help.
+"""
+
+    if prompt_key == "transcription_workshop":
+        default_prompt = default_prompt_workshop
+        prompt_str = get_prompt(prompt_key, default_prompt)
+        prompt_template = Template(prompt_str)
+        prompt = prompt_template.render()
+    else:
+        # Default fallback to podcast if key unknown, or if explicit podcast key
+        default_prompt = default_prompt_podcast
+        prompt_str = get_prompt(prompt_key, default_prompt)
+        prompt_template = Template(prompt_str)
         prompt = prompt_template.render(speakers=speakers_list)
 
     print("Generating transcript...")
@@ -137,9 +161,9 @@ def adjust_timestamps(text, offset_seconds):
     return re.sub(r'\[(\d{1,2}:\d{2}(?::\d{2})?)\]', replace_match, text)
 
 
-def transcribe_audio(podcast_path, speakers_list, model_name, output_path, mode="PODCAST"):
+def transcribe_audio(podcast_path, speakers_list, model_name, output_path, prompt_key="transcription_podcast"):
     """Uploads an audio file and generates a transcript. Handles splitting for long files."""
-    print(f"--- Starting Transcription for {podcast_path} (Mode: {mode}) ---")
+    print(f"--- Starting Transcription for {podcast_path} (Key: {prompt_key}) ---")
     
     try:
         audio = AudioSegment.from_file(podcast_path)
@@ -171,7 +195,7 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, mode=
             chunk.export(chunk_filename, format="mp3")
             
             print(f"Transcribing chunk {i+1}/{num_chunks}...")
-            part_text = _transcribe_segment(chunk_filename, speakers_list, model_name, mode=mode)
+            part_text = _transcribe_segment(chunk_filename, speakers_list, model_name, prompt_key=prompt_key)
             
             # Adjust timestamps for chunks after the first one
             # (Actually, we can run it for all, with offset 0 for the first one, but let's be explicit)
@@ -184,7 +208,7 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, mode=
             
     else:
         print("Audio is under 1 hour. Transcribing directly...")
-        text = _transcribe_segment(podcast_path, speakers_list, model_name, mode=mode)
+        text = _transcribe_segment(podcast_path, speakers_list, model_name, prompt_key=prompt_key)
         transcript_parts.append(text)
 
     full_transcript = "\\n".join(transcript_parts)
@@ -207,8 +231,7 @@ def generate_linkedin_post(transcript_path, model_name, output_path):
     
     transcript_file =  client.files.upload(file=transcript_path)
 
-    
-    linkedin_prompt = """אתה כותב עבור פודקאסט בשם "נקודה למחשבה" בהנחיית אדי שמיטנקה.
+    default_prompt = """אתה כותב עבור פודקאסט בשם "נקודה למחשבה" בהנחיית אדי שמיטנקה.
 הפודקאסט פונה לאנשים רציונליים, סקרנים, בעלי צורך בהתפתחות אישית ובחשיבה עצמאית. רובם מגיעים מעולמות לוגיים או אנליטיים (כמו הייטק, מדעים, הנדסה, עיתונאות), צורכים הרבה ידע (פודקאסטים, ספרים, סרטונים) אך לא תמיד מיישמים, וחווים תחושות של עומס, בלבול או חוסר מימוש.
 הם מעריכים גישה פרקטית, שיחה בגובה העיניים, ונרתעים משיח קלישאתי או "רוחני מדי".
 מטרת הפודקאסט:
@@ -229,6 +252,8 @@ def generate_linkedin_post(transcript_path, model_name, output_path):
 צירפתי קובץ של התמלול של הפרק שעליו נעשה את פוסט הלינדקאין.
 בנוסף צירפתי קובץ של תמלול פרק אחר שכבר עשיתי עליו פוסט לדוגמה
 וצירפתי קובץ של הפוסט שעשיתי בלינדקאין, כדי שתהיה לך דוגמה לסגנון בהתאמה לפרק."""
+
+    linkedin_prompt = get_prompt("linkedin", default_prompt)
 
     print("Generating LinkedIn post...")
 
@@ -253,16 +278,26 @@ def generate_description(transcript_path, speakers_list, model_name, output_path
     
     transcript_file =  client.files.upload(file=transcript_path)
 
-    descpt_prompt = f"""Here's the full transcript of an episode from my podcast 'נקודה למחשבה' – a show that sparks new ways of thinking about everyday life. The audience is mostly logical, analytical individuals, often from fields like tech, who appreciate thought-provoking content that challenges assumptions and helps them reflect on how to live more intentionally. Please write a compelling episode description that meets the following criteria:
+    default_prompt = f"""Here's the full transcript of an episode from my podcast 'נקודה למחשבה' – a show that sparks new ways of thinking about everyday life. The audience is mostly logical, analytical individuals, often from fields like tech, who appreciate thought-provoking content that challenges assumptions and helps them reflect on how to live more intentionally. Please write a compelling episode description that meets the following criteria:
 The description should be in Hebrew. Only use characters from the Hebrew alphabet, unless you genuinely believe foreign characters are correct.
 Opens with a strong, curiosity-driven hook that encourages people to listen
 Short and concise (9-10 sentences max), with no fluff or repetition
 Includes relevant keywords and themes from the episode that appeal to the target audience.
 Clearly communicates what the listener will gain or think about differently after the episode
-Add a bulleted list of key discussion points with timestamps. Base the timestamps on the questions {speakers_list[1]} asks {speakers_list[0]} I've attached the full transcript
+Add a bulleted list of key discussion points with timestamps. Base the timestamps on the questions {{ speakers_list[1] }} asks {{ speakers_list[0] }} I've attached the full transcript
 The timestamps should in a format like "00:00 - Intro" - with no "**" for bold text, and should be in the same order as they appear in the transcript.
 """
     
+    prompt_str = get_prompt("description", default_prompt)
+    
+    # We use Jinja2 here ONLY if the prompt string contains {{ }}, which it likely does for speakers list
+    # The default prompt logic above had an f-string which interpolated variables.
+    # To support external config, we should treat it as a Jinja2 template.
+    # The user config should contain Jinja2 placeholders like {{ speakers_list[0] }}
+    
+    prompt_template = Template(prompt_str)
+    descpt_prompt = prompt_template.render(speakers_list=speakers_list)
+
     print("Generating episode description...")
     
     response = client.models.generate_content(
@@ -285,11 +320,13 @@ def generate_summary(transcript_path, speakers_list, model_name, output_path):
     
     transcript_file =  client.files.upload(file=transcript_path)
 
-    descpt_prompt = f"""Here's the full transcript of an conversation. Please write a summary that includes the key talking points, things to remember, important notes.
+    default_prompt = """Here's the full transcript of an conversation. Please write a summary that includes the key talking points, things to remember, important notes.
 The summary should be in Hebrew. Only use characters from the Hebrew alphabet, unless you genuinely believe foreign characters are correct.
 Since the conversation was conducted in zoom and might have included visuals, include timestamps where you deem relevant.
 """
     
+    descpt_prompt = get_prompt("summary", default_prompt)
+
     print("Generating transcript summary...")
     
     response = client.models.generate_content(
@@ -310,9 +347,11 @@ Since the conversation was conducted in zoom and might have included visuals, in
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process podcast audio files.")
     parser.add_argument("--file", required=True, help="Path to the input audio file")
-    parser.add_argument("--mode", default="PODCAST", choices=["PODCAST", "WORKSHOP"], help="Processing mode")
+    # Remove strict choices to allow custom config modes (e.g. "Draft", "Guest") which fallback to PODCAST defaults
+    parser.add_argument("--mode", default="PODCAST", help="Processing mode")
     parser.add_argument("--speakers", nargs="+", default=[], help="List of speakers")
-    parser.add_argument("--transcribe-only", action="store_true", help="Only transcribe the audio, skip generation tasks")
+    parser.add_argument("--transcribe-only", action="store_true", help="Only transcribe the audio, skip generation tasks (Deprecated, use --actions)")
+    parser.add_argument("--actions", nargs="+", default=["transcribe_podcast", "summary", "linkedin", "description"], help="List of actions to perform")
     
     args = parser.parse_args()
     
@@ -320,7 +359,12 @@ if __name__ == "__main__":
     PODCAST_FILE_PATH = args.file
     MODE = args.mode
     SPEAKERS = args.speakers
-    TRANSCRIBE_ONLY = args.transcribe_only
+    # Convert actions to lower case to handle potential case issues
+    ACTIONS = [a.lower() for a in args.actions]
+    
+    # Backward compatibility for transcribe-only
+    if args.transcribe_only:
+        ACTIONS = ["transcribe_podcast"]
     
     # Model
     MODEL = "gemini-3-flash-preview"
@@ -339,16 +383,28 @@ if __name__ == "__main__":
     SUMMARY_PATH = f"{base_name}_Summary.txt"
 
     # 1. Transcribe the audio file
-    transcript_path = transcribe_audio(PODCAST_FILE_PATH, SPEAKERS, MODEL, TRANSCRIPT_FILE_PATH, mode=MODE)
+    transcript_path = None
+    
+    # Determine transcription type
+    if "transcribe_podcast" in ACTIONS:
+        transcript_path = transcribe_audio(PODCAST_FILE_PATH, SPEAKERS, MODEL, TRANSCRIPT_FILE_PATH, prompt_key="transcription_podcast")
+    elif "transcribe_workshop" in ACTIONS:
+        transcript_path = transcribe_audio(PODCAST_FILE_PATH, SPEAKERS, MODEL, TRANSCRIPT_FILE_PATH, prompt_key="transcription_workshop")
+    elif os.path.exists(TRANSCRIPT_FILE_PATH):
+        # reuse existing if we are just re-running other steps
+        print(f"Skipping transcription, using existing file: {TRANSCRIPT_FILE_PATH}")
+        transcript_path = TRANSCRIPT_FILE_PATH
+    else:
+        print("No transcription action selected and no existing transcript found. Cannot proceed with other steps.")
+        sys.exit(1)
 
     if transcript_path:
-        if TRANSCRIBE_ONLY:
-            print("--- Transcribe-only mode: skipping post-generation tasks. ---")
-        elif MODE == "PODCAST":
-            # 2. Generate LinkedIn post from the transcript
+        # 2. Generate LinkedIn post
+        if "linkedin" in ACTIONS:
             generate_linkedin_post(transcript_path, MODEL, LINKEDIN_POST_PATH)
-            
-            # 3. Generate episode description from the transcript
+        
+        # 3. Generate episode description
+        if "description" in ACTIONS:
             # Ensure we have at least 2 speakers for the description prompt logic if needed, or handle gracefully
             if len(SPEAKERS) >= 2:
                  generate_description(transcript_path, SPEAKERS, MODEL, DESCRIPTION_PATH)
@@ -358,7 +414,8 @@ if __name__ == "__main__":
                  else:
                      generate_description(transcript_path, ["Host", "Guest"], MODEL, DESCRIPTION_PATH)
 
-            # 4. Generate transcript summary from the transcript
+        # 4. Generate transcript summary
+        if "summary" in ACTIONS:
             generate_summary(transcript_path, SPEAKERS, MODEL, SUMMARY_PATH)
         
-        print("--- All tasks completed. ---")
+        print("--- All requested tasks completed. ---")

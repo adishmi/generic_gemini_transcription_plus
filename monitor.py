@@ -2,24 +2,13 @@ import os
 import time
 import subprocess
 import logging
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configuration
-WATCH_CONFIGS = [
-    {
-        "directory": "/Users/adishmitanka/Content/LongForm/נקודה למחשבה",
-        "filter_word": "final",
-        "mode": "PODCAST"
-    },
-    {
-        "directory": "/Users/adishmitanka/Content/LongForm/Workshops",
-        "filter_word": "workshop",
-        "mode": "WORKSHOP"
-    }
-]
-
+# Constants
+CONFIG_FILE = "config.json"
 PROCESSED_LOG = "processed_files.log"
 POLL_INTERVAL = 10  # Seconds
 
@@ -33,6 +22,17 @@ logging.basicConfig(
     ]
 )
 
+def load_config():
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logging.error(f"Configuration file {CONFIG_FILE} not found.")
+        return None
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing {CONFIG_FILE}: {e}")
+        return None
+
 def load_processed_files():
     if not os.path.exists(PROCESSED_LOG):
         return set()
@@ -45,11 +45,11 @@ def save_processed_file(filename):
 
 def get_speakers(filename, mode):
     # Logic:
-    # If WORKSHOP mode -> ["Adi", "Speaker 1", "Speaker 2"]
+    # If WORKSHOP matches mode -> ["Adi", "Speaker 1", "Speaker 2"]
     # If "Solo" in filename -> ["Adi"]
     # Else -> [First Word of Filename, "Adi"]
     
-    if mode == "WORKSHOP":
+    if mode.upper() == "WORKSHOP":
         return ["Adi", "Speaker 1", "Speaker 2"]
         
     base_name = os.path.basename(filename)
@@ -64,31 +64,33 @@ def get_speakers(filename, mode):
         first_word = name_without_ext.replace("_", " ").split(" ")[0]
         return [first_word, "Adi"]
 
-def process_file(filepath, mode):
+def determine_mode_and_actions(filename, config_modes):
+    filename_lower = filename.lower()
+    
+    # 1. Check for specific keywords in filename
+    for mode_name, mode_config in config_modes.items():
+        for keyword in mode_config.get("keywords", []):
+            if keyword.lower() in filename_lower:
+                return mode_name, mode_config.get("actions", [])
+    
+    return None, []
+
+def process_file(filepath, mode, actions, python_interpreter):
     filename = os.path.basename(filepath)
-    logging.info(f"Processing new file ({mode}): {filename}")
+    logging.info(f"Processing new file: {filename} | Mode: {mode} | Actions: {actions}")
     
     speakers = get_speakers(filename, mode)
     logging.info(f"Identified speakers: {speakers}")
     
-    # Check if it's a draft
-    is_draft = "draft" in filename.lower()
-    
     # Construct command
-    # python main.py --file "path/to/file" --mode PODCAST --speakers "Speaker1" "Speaker2"
+    # python main.py --file "path/to/file" --mode PODCAST --speakers "Speaker1" "Speaker2" --actions action1 action2
     
-    # Use the specific python interpreter that has the dependencies installed
-    python_path = "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
     cmd = [
-        python_path, "main.py",
+        python_interpreter, "main.py",
         "--file", filepath,
         "--mode", mode,
         "--speakers"
-    ] + speakers
-    
-    if is_draft:
-        cmd.append("--transcribe-only")
-        logging.info("Detected DRAFT file - setting transcribe-only mode")
+    ] + speakers + ["--actions"] + actions
     
     logging.info(f"Running command: {' '.join(cmd)}")
     
@@ -100,42 +102,49 @@ def process_file(filepath, mode):
         logging.error(f"Error processing {filename}: {e}")
 
 def monitor():
-    processed_files = load_processed_files()
-    
-    # Validation
-    valid_configs = []
-    for config in WATCH_CONFIGS:
-        if os.path.exists(config["directory"]):
-            logging.info(f"Monitoring folder: {config['directory']} (Mode: {config['mode']}, Filter: {config['filter_word']})")
-            valid_configs.append(config)
-        else:
-            logging.error(f"Directory {config['directory']} does not exist. Skipping.")
-    
-    if not valid_configs:
-        logging.error("No valid watch directories found. Exiting.")
-        return
-
     logging.info("Monitoring for new files...")
 
     while True:
         try:
-            for config in valid_configs:
-                for root, dirs, files in os.walk(config["directory"]):
+            config = load_config()
+            if not config:
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            processed_files = load_processed_files()
+            python_interpreter = config.get("general", {}).get("python_interpreter", "python3")
+            
+            # Validation of watch paths
+            watch_paths = []
+            for entry in config.get("watch_paths", []):
+                directory = entry.get("path")
+                if os.path.exists(directory):
+                     watch_paths.append(entry)
+                # We skip noisy logging here since it runs every loop
+            
+            if not watch_paths:
+                logging.error("No valid watch directories found.")
+                time.sleep(POLL_INTERVAL)
+                continue
+                
+            for entry in watch_paths:
+                directory = entry["path"]
+                
+                for root, dirs, files in os.walk(directory):
                     for file in files:
                         filepath = os.path.join(root, file)
                         ext = os.path.splitext(file)[1].lower()
                         
-                        # Add 'draft' to the filter check
-                        is_target = config["filter_word"] in file.lower() or "draft" in file.lower()
-                        
-                        if is_target and ext in [".mp3", ".m4a", ".wav", ".flac"]:
-                            if file not in processed_files:
-                                if os.path.getsize(filepath) == 0:
-                                    logging.warning(f"File {file} is empty. Skipping.")
-                                    continue
-
-                                process_file(filepath, config["mode"])
-                                processed_files.add(file)
+                        if ext in [".mp3", ".m4a", ".wav", ".flac"]:
+                             # Determine if we should process it
+                             mode, actions = determine_mode_and_actions(file, config.get("modes", {}))
+                             
+                             if mode and file not in processed_files and os.path.getsize(filepath) > 0:
+                                 # Found a matching mode and file is not processed
+                                 process_file(filepath, mode, actions, python_interpreter)
+                                 # Refresh processed files for the next inner file check if needed
+                                 # but processed_files.add(file) is enough for the current loop
+                                 processed_files.add(file)
             
             time.sleep(POLL_INTERVAL)
             

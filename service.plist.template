@@ -6,19 +6,19 @@
     <string>com.adishmitanka.podcastmonitor</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Library/Frameworks/Python.framework/Versions/3.13/bin/python3</string>
-        <string>/Users/adishmitanka/Local Documents/Code/Gemini Transcribe/monitor.py</string>
+        <string>{{PYTHON_PATH}}</string>
+        <string>{{SCRIPT_PATH}}</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/adishmitanka/Local Documents/Code/Gemini Transcribe</string>
+    <string>{{WORKING_DIRECTORY}}</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/adishmitanka/Local Documents/Code/Gemini Transcribe/monitor.log</string>
+    <string>{{LOG_PATH}}</string>
     <key>StandardErrorPath</key>
-    <string>/Users/adishmitanka/Local Documents/Code/Gemini Transcribe/monitor.log</string>
+    <string>{{LOG_PATH}}</string>
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
