@@ -131,10 +131,18 @@ def monitor():
                 directory = entry["path"]
                 
                 for root, dirs, files in os.walk(directory):
+                    # 1. Prevent recursion: Do not walk into Transcriptions folders
+                    if "Transcriptions" in dirs:
+                        dirs.remove("Transcriptions")
+
                     for file in files:
                         filepath = os.path.join(root, file)
                         ext = os.path.splitext(file)[1].lower()
                         
+                        # 2. Skip generated intermediate files if they sit in the root for some reason
+                        if "_compressed" in file or "_part" in file:
+                            continue
+
                         if ext in [".mp3", ".m4a", ".wav", ".flac"]:
                              # Determine if we should process it
                              mode, actions = determine_mode_and_actions(file, config.get("modes", {}))

@@ -175,6 +175,13 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, promp
     # Threshold: 50 minutes to be safe (Gemini 2.5 limit is around 1 hour)
     CHUNK_LENGTH_MS = 50 * 60 * 1000 
     
+    # Check bitrate logic
+    file_size = os.path.getsize(podcast_path)
+    bitrate_bps = (file_size * 8) / (duration_ms / 1000) if duration_ms > 0 else 0
+    TARGET_BITRATE = "150k"
+    
+    transcript_parts = []
+    
     transcript_parts = []
     
     if duration_ms > 60 * 60 * 1000: # If > 1 hour
@@ -187,12 +194,12 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, promp
             end_ms = min((i + 1) * CHUNK_LENGTH_MS, duration_ms)
             
             chunk = audio[start_ms:end_ms]
-            # Determine the Transcriptions directory from the output_path
-            transcriptions_dir = os.path.dirname(output_path)
+            # Save chunks in the same directory as the original file
+            source_dir = os.path.dirname(podcast_path)
             base_filename = os.path.splitext(os.path.basename(podcast_path))[0]
-            chunk_filename = os.path.join(transcriptions_dir, f"{base_filename}_part{i+1}.mp3")
-            print(f"Exporting chunk {i+1}/{num_chunks}: {chunk_filename}...")
-            chunk.export(chunk_filename, format="mp3")
+            chunk_filename = os.path.join(source_dir, f"{base_filename}_part{i+1}.mp3")
+            print(f"Exporting chunk {i+1}/{num_chunks}: {chunk_filename} ({TARGET_BITRATE})...")
+            chunk.export(chunk_filename, format="mp3", bitrate=TARGET_BITRATE)
             
             print(f"Transcribing chunk {i+1}/{num_chunks}...")
             part_text = _transcribe_segment(chunk_filename, speakers_list, model_name, prompt_key=prompt_key)
@@ -207,8 +214,23 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, promp
             transcript_parts.append(part_text)
             
     else:
-        print("Audio is under 1 hour. Transcribing directly...")
-        text = _transcribe_segment(podcast_path, speakers_list, model_name, prompt_key=prompt_key)
+        print("Audio is under 1 hour.")
+        file_to_transcribe = podcast_path
+        
+        # If bitrate is high (> 160kbps), compress
+        if bitrate_bps > 160000:
+             print(f"File bitrate approx {int(bitrate_bps/1000)}kbps. Compressing to {TARGET_BITRATE}...")
+             # Save compressed file in the same directory as the original file
+             source_dir = os.path.dirname(podcast_path)
+             base_filename = os.path.splitext(os.path.basename(podcast_path))[0]
+             compressed_path = os.path.join(source_dir, f"{base_filename}_compressed.mp3")
+             
+             audio.export(compressed_path, format="mp3", bitrate=TARGET_BITRATE)
+             print(f"Compressed file saved to {compressed_path}")
+             file_to_transcribe = compressed_path
+        
+        print(f"Transcribing {file_to_transcribe}...")
+        text = _transcribe_segment(file_to_transcribe, speakers_list, model_name, prompt_key=prompt_key)
         transcript_parts.append(text)
 
     full_transcript = "\\n".join(transcript_parts)
