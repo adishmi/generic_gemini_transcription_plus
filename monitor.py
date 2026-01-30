@@ -17,8 +17,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler("monitor.log")
+        logging.StreamHandler()
     ]
 )
 
@@ -86,7 +85,7 @@ def process_file(filepath, mode, actions, python_interpreter):
     # python main.py --file "path/to/file" --mode PODCAST --speakers "Speaker1" "Speaker2" --actions action1 action2
     
     cmd = [
-        python_interpreter, "main.py",
+        python_interpreter, "-u", "main.py",
         "--file", filepath,
         "--mode", mode,
         "--speakers"
@@ -149,10 +148,15 @@ def monitor():
                              
                              if mode and file not in processed_files and os.path.getsize(filepath) > 0:
                                  # Found a matching mode and file is not processed
-                                 process_file(filepath, mode, actions, python_interpreter)
-                                 # Refresh processed files for the next inner file check if needed
-                                 # but processed_files.add(file) is enough for the current loop
-                                 processed_files.add(file)
+                                 try:
+                                     process_file(filepath, mode, actions, python_interpreter)
+                                     processed_files.add(file)
+                                 except Exception as e:
+                                     logging.error(f"Error processing {file}: {e}")
+                                     # Optionally add to processed_files anyway to avoid infinite retry loop, 
+                                     # but for now let's let it retry next scan unless we want to skip it.
+                                     # For now, just continue to the next file in THIS scan.
+                                     pass
             
             time.sleep(POLL_INTERVAL)
             

@@ -182,7 +182,9 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, promp
     
     transcript_parts = []
     
-    transcript_parts = []
+    # helper to identify the transcriptions folder
+    transcriptions_dir = os.path.dirname(output_path)
+    base_filename = os.path.splitext(os.path.basename(podcast_path))[0]
     
     if duration_ms > 60 * 60 * 1000: # If > 1 hour
         print(f"Audio is {duration_ms/1000/60:.2f} minutes long. Splitting into chunks...")
@@ -194,10 +196,8 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, promp
             end_ms = min((i + 1) * CHUNK_LENGTH_MS, duration_ms)
             
             chunk = audio[start_ms:end_ms]
-            # Save chunks in the same directory as the original file
-            source_dir = os.path.dirname(podcast_path)
-            base_filename = os.path.splitext(os.path.basename(podcast_path))[0]
-            chunk_filename = os.path.join(source_dir, f"{base_filename}_part{i+1}.mp3")
+            # Save chunks in the Transcriptions directory
+            chunk_filename = os.path.join(transcriptions_dir, f"{base_filename}_part{i+1}.mp3")
             print(f"Exporting chunk {i+1}/{num_chunks}: {chunk_filename} ({TARGET_BITRATE})...")
             chunk.export(chunk_filename, format="mp3", bitrate=TARGET_BITRATE)
             
@@ -220,10 +220,8 @@ def transcribe_audio(podcast_path, speakers_list, model_name, output_path, promp
         # If bitrate is high (> 160kbps), compress
         if bitrate_bps > 160000:
              print(f"File bitrate approx {int(bitrate_bps/1000)}kbps. Compressing to {TARGET_BITRATE}...")
-             # Save compressed file in the same directory as the original file
-             source_dir = os.path.dirname(podcast_path)
-             base_filename = os.path.splitext(os.path.basename(podcast_path))[0]
-             compressed_path = os.path.join(source_dir, f"{base_filename}_compressed.mp3")
+             # Save compressed file in the Transcriptions directory
+             compressed_path = os.path.join(transcriptions_dir, f"{base_filename}_compressed.mp3")
              
              audio.export(compressed_path, format="mp3", bitrate=TARGET_BITRATE)
              print(f"Compressed file saved to {compressed_path}")
@@ -366,6 +364,34 @@ Since the conversation was conducted in zoom and might have included visuals, in
     print(f"Transcript summary saved to {output_path}")
 
 
+def generate_sales_feedback(transcript_path, model_name, output_path):
+    """Generates sales feedback based on a transcript file."""
+    print(f"--- Generating Sales Feedback from {transcript_path} ---")
+    
+    transcript_file = client.files.upload(file=transcript_path)
+
+    system_prompt = get_prompt("sales_feedback_system", "")
+    user_prompt = get_prompt("sales_feedback_user", "")
+    
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
+    print("Generating sales feedback...")
+    
+    response = client.models.generate_content(
+        model=model_name,
+        contents=[full_prompt, transcript_file],
+    )
+
+    text = _extract_text_from_response(response)
+    if not text:
+        raise RuntimeError("Empty text from model response for sales feedback.")
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(text)
+        
+    print(f"Sales feedback saved to {output_path}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process podcast audio files.")
     parser.add_argument("--file", required=True, help="Path to the input audio file")
@@ -403,6 +429,7 @@ if __name__ == "__main__":
     LINKEDIN_POST_PATH = f"{base_name}_Linkedin.txt"
     DESCRIPTION_PATH = f"{base_name}_Description.txt"
     SUMMARY_PATH = f"{base_name}_Summary.txt"
+    SALES_FEEDBACK_PATH = f"{base_name}_SalesFeedback.txt"
 
     # 1. Transcribe the audio file
     transcript_path = None
@@ -439,5 +466,9 @@ if __name__ == "__main__":
         # 4. Generate transcript summary
         if "summary" in ACTIONS:
             generate_summary(transcript_path, SPEAKERS, MODEL, SUMMARY_PATH)
+
+        # 5. Generate Sales Feedback
+        if "sales_feedback" in ACTIONS:
+            generate_sales_feedback(transcript_path, MODEL, SALES_FEEDBACK_PATH)
         
         print("--- All requested tasks completed. ---")
