@@ -99,7 +99,7 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
             id,
             name: "New Action",
             type: "text_generation", // Default
-            model: "gemini-1.5-flash",
+            model: "gemini-3-flash-preview",
             prompt: ""
         };
         const updatedConfig = {
@@ -167,7 +167,7 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
     );
 
     return (
-        <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
+        <div style={{ display: 'flex', height: '100%', width: '100%', position: 'relative' }}>
             {/* LEFT PANEL: Multi-Section */}
             <div style={{ width: '320px', borderRight: '1px solid #444', display: 'flex', flexDirection: 'column', backgroundColor: '#2a2a2a' }}>
 
@@ -347,13 +347,10 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                         <div style={{ marginBottom: '20px' }}>
                             <label style={{ display: 'block', color: '#aaa', marginBottom: '5px' }}>Model</label>
                             <select
-                                value={selectedDef.model || "gemini-1.5-flash"}
+                                value={selectedDef.model || "gemini-3-flash-preview"}
                                 onChange={(e) => updateActionDef(selectedDef.id, { model: e.target.value })}
                                 style={{ width: '100%', padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #555' }}
                             >
-                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
                                 <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
                                 <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
                             </select>

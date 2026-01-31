@@ -91,24 +91,29 @@ ipcMain.handle('start-engine', async (event, { pythonPath }) => {
     const settingsPath = path.join(userData, 'settings.json');
     const statePath = path.join(userData, 'state.json');
 
-    // Path to engine.py
-    const backendPath = path.join(__dirname, '../backend/engine.py');
-
-    // Check for local venv in dev/prod structure
-    // Dev: ../backend/venv/bin/python
-    const venvPython = path.join(__dirname, '../backend/venv/bin/python');
-
-    // If not provided or generic, try venv
+    // --- SIDECAR LOGIC ---
     let finalPython = pythonPath;
-    if ((!pythonPath || pythonPath === 'python3') && fs.existsSync(venvPython)) {
-        finalPython = venvPython;
-        console.log('Using local venv:', finalPython);
+    let backendPath = path.join(__dirname, '../backend/engine.py');
+    let args = ['-u', backendPath, '--config', settingsPath, '--state', statePath];
+
+    if (app.isPackaged) {
+        // In production, use the bundled executable
+        const exePath = path.join(process.resourcesPath, 'backend/engine_backend');
+        finalPython = exePath;
+        args = ['--config', settingsPath, '--state', statePath]; // Sidecar doesn't need python -u or engine.py script arg
+        console.log('Running packaged sidecar:', finalPython);
+    } else {
+        // In development, handle venv
+        const venvPython = path.join(__dirname, '../backend/venv/bin/python');
+        if ((!pythonPath || pythonPath === 'python3') && fs.existsSync(venvPython)) {
+            finalPython = venvPython;
+            console.log('Using local venv:', finalPython);
+        }
+        console.log(`Spawning Python: ${finalPython} ${backendPath} --config ${settingsPath}`);
     }
 
-    console.log(`Spawning Python: ${finalPython} ${backendPath} --config ${settingsPath}`);
-
-    pythonProcess = spawn(finalPython, ['-u', backendPath, '--config', settingsPath, '--state', statePath], {
-        cwd: path.dirname(backendPath), // Set CWD to backend dir for imports
+    pythonProcess = spawn(finalPython, args, {
+        cwd: app.isPackaged ? process.resourcesPath : path.dirname(backendPath),
         stdio: ['ignore', 'pipe', 'pipe']
     });
 

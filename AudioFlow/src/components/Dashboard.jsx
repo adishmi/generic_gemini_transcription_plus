@@ -41,7 +41,7 @@ const Dashboard = ({ jobs, config, engineStatus, onToggleEngine }) => {
     }, [jobs]);
 
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ padding: '20px', margin: '0 20px', width: '100%', boxSizing: 'border-box' }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
                 <h2 style={{ margin: 0 }}>AudioFlow</h2>

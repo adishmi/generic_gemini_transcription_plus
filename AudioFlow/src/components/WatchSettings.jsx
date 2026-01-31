@@ -40,7 +40,7 @@ const Settings = ({ config, onSaveConfig }) => {
     };
 
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+        <div style={{ padding: '20px', margin: '0 20px' }}>
             <h1 style={{ marginBottom: '30px', borderBottom: '1px solid #444', paddingBottom: '10px' }}>Settings</h1>
 
             {/* General Settings */}
