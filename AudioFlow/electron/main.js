@@ -59,6 +59,7 @@ ipcMain.handle('get-app-paths', () => {
 
     return {
         userData,
+        userData,
         settingsPath,
         statePath: path.join(userData, 'state.json'),
     };

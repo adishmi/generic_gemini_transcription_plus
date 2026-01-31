@@ -39,7 +39,12 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
             trigger_keywords: [],
             steps: []
         };
-        setLocalConfig(prev => ({ ...prev, modes: [...(prev.modes || []), newMode] }));
+        const updatedConfig = {
+            ...localConfig,
+            modes: [...(localConfig.modes || []), newMode]
+        };
+        setLocalConfig(updatedConfig);
+        onSaveConfig(updatedConfig);
         setSelectedModeId(newMode.id);
         setSelectedActionDefId(null);
     };
@@ -53,10 +58,12 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
 
     const deleteMode = (id) => {
         if (confirm("Are you sure you want to delete this mode?")) {
-            setLocalConfig(prev => ({
-                ...prev,
-                modes: (prev.modes || []).filter(m => m.id !== id)
-            }));
+            const updatedConfig = {
+                ...localConfig,
+                modes: (localConfig.modes || []).filter(m => m.id !== id)
+            };
+            setLocalConfig(updatedConfig);
+            onSaveConfig(updatedConfig);
             if (selectedModeId === id) setSelectedModeId(null);
         }
     };
@@ -95,10 +102,12 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
             model: "gemini-1.5-flash",
             prompt: ""
         };
-        setLocalConfig(prev => ({
-            ...prev,
-            action_definitions: { ...(prev.action_definitions || {}), [id]: newDef }
-        }));
+        const updatedConfig = {
+            ...localConfig,
+            action_definitions: { ...(localConfig.action_definitions || {}), [id]: newDef }
+        };
+        setLocalConfig(updatedConfig);
+        onSaveConfig(updatedConfig);
         setSelectedActionDefId(id);
         setSelectedModeId(null);
     };
@@ -115,11 +124,11 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
 
     const deleteActionDef = (id) => {
         if (confirm("Are you sure you want to delete this action? It may break modes that use it.")) {
-            setLocalConfig(prev => {
-                const newDefs = { ...prev.action_definitions };
-                delete newDefs[id];
-                return { ...prev, action_definitions: newDefs };
-            });
+            const newDefs = { ...localConfig.action_definitions };
+            delete newDefs[id];
+            const updatedConfig = { ...localConfig, action_definitions: newDefs };
+            setLocalConfig(updatedConfig);
+            onSaveConfig(updatedConfig);
             if (selectedActionDefId === id) setSelectedActionDefId(null);
         }
     };
@@ -211,6 +220,7 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                         ))}
                     </ul>
                 </div>
+
             </div>
 
             {/* RIGHT PANEL: Editor */}
@@ -341,8 +351,11 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                                 onChange={(e) => updateActionDef(selectedDef.id, { model: e.target.value })}
                                 style={{ width: '100%', padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #555' }}
                             >
-                                <option value="gemini-3-pro">Gemini 3 Pro</option>
-                                <option value="gemini-3-flash">Gemini 3 Flash</option>
+                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash</option>
+                                <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                                <option value="gemini-3-pro-preview">Gemini 3 Pro</option>
                             </select>
                         </div>
 
@@ -368,43 +381,45 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
             </div>
 
             {/* Context Menu Overlay */}
-            {contextMenu && (
-                <div
-                    style={{
-                        position: 'fixed',
-                        top: contextMenu.y,
-                        left: contextMenu.x,
-                        backgroundColor: '#222',
-                        border: '1px solid #555',
-                        borderRadius: '4px',
-                        zIndex: 1000,
-                        boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
-                        padding: '4px 0'
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                >
+            {
+                contextMenu && (
                     <div
-                        onClick={() => {
-                            if (contextMenu.type === 'mode') deleteMode(contextMenu.id);
-                            if (contextMenu.type === 'action') deleteActionDef(contextMenu.id);
-                            setContextMenu(null);
-                        }}
                         style={{
-                            padding: '8px 16px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            color: '#ff6b6b'
+                            position: 'fixed',
+                            top: contextMenu.y,
+                            left: contextMenu.x,
+                            backgroundColor: '#222',
+                            border: '1px solid #555',
+                            borderRadius: '4px',
+                            zIndex: 1000,
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+                            padding: '4px 0'
                         }}
-                        onMouseEnter={(e) => e.target.style.backgroundColor = '#333'}
-                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        <span>🗑️</span> Delete
+                        <div
+                            onClick={() => {
+                                if (contextMenu.type === 'mode') deleteMode(contextMenu.id);
+                                if (contextMenu.type === 'action') deleteActionDef(contextMenu.id);
+                                setContextMenu(null);
+                            }}
+                            style={{
+                                padding: '8px 16px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                color: '#ff6b6b'
+                            }}
+                            onMouseEnter={(e) => e.target.style.backgroundColor = '#333'}
+                            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                        >
+                            <span>🗑️</span> Delete
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 };
 

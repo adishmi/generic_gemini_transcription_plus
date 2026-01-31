@@ -101,6 +101,32 @@ class AudioFlowEngine:
                 break
         
         if matched_mode:
+            # Check if job already exists for this file
+            state = self.state_manager.load_state()
+            active_jobs = state.get("active_jobs", {})
+            existing_job_id = None
+            
+            for j_id, job in active_jobs.items():
+                if job.get("filepath") == file_path:
+                    existing_job_id = j_id
+                    break
+            
+            if existing_job_id:
+                existing_status = active_jobs[existing_job_id].get("status")
+                logging.info(f"Found existing job {existing_job_id} for {filename} (Status: {existing_status})")
+                
+                if existing_status == "error":
+                    logging.info(f"Retrying previously failed job: {existing_job_id}")
+                    self.state_manager.update_job(existing_job_id, {"status": "processing", "error": None})
+                    asyncio.run_coroutine_threadsafe(self.process_job(existing_job_id), self.loop)
+                    return
+                elif existing_status == "processing":
+                    logging.info(f"Job {existing_job_id} is already processing. Skipping duplicate.")
+                    return
+                elif existing_status == "completed":
+                    logging.info(f"Job {existing_job_id} is already completed.")
+                    return
+
             logging.info(f"File matches mode '{matched_mode['name']}': {filename}")
             
             # Create Job ID (hash of path + timestamp or similar, simple for now)
@@ -337,12 +363,24 @@ if __name__ == "__main__":
     parser.add_argument("--state", required=True)
     args = parser.parse_args()
     
-    # Load API Key from env
-    from dotenv import load_dotenv
-    load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
+    # Load Config to check for API Key first
+    import json
+    try:
+        with open(args.config, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+            api_key = cfg.get("gemini_api_key")
+    except Exception as e:
+        logging.warning(f"Failed to read config for API key check: {e}")
+        api_key = None
+
+    # Fallback to env
     if not api_key:
-        logging.error("GOOGLE_API_KEY not found in env.")
+        from dotenv import load_dotenv
+        load_dotenv()
+        api_key = os.getenv("GOOGLE_API_KEY")
+
+    if not api_key:
+        logging.error("GOOGLE_API_KEY not found in settings or env.")
         sys.exit(1)
 
     engine = AudioFlowEngine(args.config, args.state, api_key)

@@ -129,7 +129,7 @@ function App() {
     setEngineStatus('stopped');
   };
 
-  const handleCreateConfig = async (initialConfig) => {
+  const handleCreateConfig = async (customConfig = {}) => {
     // User specifically requested to add default modes from config.json
     // We define the full legacy config here.
 
@@ -222,10 +222,10 @@ function App() {
       ]
     };
 
-    const defaultCfg = legacyConfig;
+    const defaultCfg = { ...legacyConfig, ...customConfig };
 
     const paths = await window.electronAPI.getAppPaths();
-    await window.fsAPI.writeFile(paths.configPath, JSON.stringify(defaultCfg, null, 2));
+    await window.fsAPI.writeFile(paths.settingsPath, JSON.stringify(defaultCfg, null, 2));
     setConfig(defaultCfg);
     setOnboardingComplete(true);
   };
@@ -246,7 +246,7 @@ function App() {
   if (loading) return <div>Loading...</div>;
 
   if (!onboardingComplete) {
-    return <Onboarding onComplete={() => handleCreateConfig()} />;
+    return <Onboarding onComplete={(data) => handleCreateConfig(data)} />;
   }
 
   return (
@@ -255,7 +255,7 @@ function App() {
       <div style={{ width: '60px', backgroundColor: '#333', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '20px' }}>
         <div onClick={() => setView('dashboard')} style={{ cursor: 'pointer', marginBottom: '20px', fontSize: '24px', opacity: view === 'dashboard' ? 1 : 0.5 }} title="Dashboard">📊</div>
         <div onClick={() => setView('modes')} style={{ cursor: 'pointer', marginBottom: '20px', fontSize: '24px', opacity: view === 'modes' ? 1 : 0.5 }} title="Mode Builder">⚡</div>
-        <div onClick={() => setView('watch')} style={{ cursor: 'pointer', fontSize: '24px', opacity: view === 'watch' ? 1 : 0.5 }} title="Watch Folders">📂</div>
+        <div onClick={() => setView('watch')} style={{ cursor: 'pointer', fontSize: '24px', opacity: view === 'watch' ? 1 : 0.5 }} title="Settings">⚙️</div>
       </div>
 
       {/* Content */}
