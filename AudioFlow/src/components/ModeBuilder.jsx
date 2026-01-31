@@ -5,12 +5,22 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
     const [selectedModeId, setSelectedModeId] = useState(null);
     const [selectedActionDefId, setSelectedActionDefId] = useState(null);
 
+    // Context Menu State
+    const [contextMenu, setContextMenu] = useState(null); // { x, y, type: 'mode'|'action', id }
+
     // Local config state
     const [localConfig, setLocalConfig] = useState(config || { modes: [], action_definitions: {} });
 
     useEffect(() => {
         if (config) setLocalConfig(config);
     }, [config]);
+
+    // Close context menu on click elsewhere
+    useEffect(() => {
+        const handleClick = () => setContextMenu(null);
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, []);
 
     const handleSave = () => {
         onSaveConfig(localConfig);
@@ -41,6 +51,16 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
         }));
     };
 
+    const deleteMode = (id) => {
+        if (confirm("Are you sure you want to delete this mode?")) {
+            setLocalConfig(prev => ({
+                ...prev,
+                modes: (prev.modes || []).filter(m => m.id !== id)
+            }));
+            if (selectedModeId === id) setSelectedModeId(null);
+        }
+    };
+
     const addStepToMode = (modeId, actionDefId) => {
         const mode = getMode(modeId);
         if (!mode) return; // Safety check
@@ -64,8 +84,6 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
         const newSteps = (mode.steps || []).map(s => s.id === stepId ? { ...s, ...updates } : s);
         updateMode(modeId, { steps: newSteps });
     };
-
-    // ... (Left Panel Logic)
 
     // --- Handlers: Action Library ---
     const addActionDef = () => {
@@ -93,6 +111,22 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                 [id]: { ...(prev.action_definitions || {})[id], ...updates }
             }
         }));
+    };
+
+    const deleteActionDef = (id) => {
+        if (confirm("Are you sure you want to delete this action? It may break modes that use it.")) {
+            setLocalConfig(prev => {
+                const newDefs = { ...prev.action_definitions };
+                delete newDefs[id];
+                return { ...prev, action_definitions: newDefs };
+            });
+            if (selectedActionDefId === id) setSelectedActionDefId(null);
+        }
+    };
+
+    const handleContextMenu = (e, type, id) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, type, id });
     };
 
     // --- Render ---
@@ -124,7 +158,7 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
     );
 
     return (
-        <div style={{ display: 'flex', height: '100%' }}>
+        <div style={{ display: 'flex', height: '100%', position: 'relative' }}>
             {/* LEFT PANEL: Multi-Section */}
             <div style={{ width: '320px', borderRight: '1px solid #444', display: 'flex', flexDirection: 'column', backgroundColor: '#2a2a2a' }}>
 
@@ -139,6 +173,7 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                             <li
                                 key={mode.id}
                                 onClick={() => { setSelectedModeId(mode.id); setSelectedActionDefId(null); }}
+                                onContextMenu={(e) => handleContextMenu(e, 'mode', mode.id)}
                                 style={{
                                     padding: '10px',
                                     cursor: 'pointer',
@@ -163,6 +198,7 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                             <li
                                 key={def.id}
                                 onClick={() => { setSelectedActionDefId(def.id); setSelectedModeId(null); }}
+                                onContextMenu={(e) => handleContextMenu(e, 'action', def.id)}
                                 style={{
                                     padding: '10px',
                                     cursor: 'pointer',
@@ -175,8 +211,6 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                         ))}
                     </ul>
                 </div>
-
-                {/* Save Button Removed from side panel */}
             </div>
 
             {/* RIGHT PANEL: Editor */}
@@ -214,6 +248,9 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
 
                                 return (
                                     <div key={step.id} style={{ padding: '15px', backgroundColor: '#2a2a2a', border: '1px solid #444', borderRadius: '4px' }}>
+                                        <div style={{ marginBottom: '10px', fontWeight: 'bold', color: '#ccc', borderBottom: '1px solid #444', paddingBottom: '5px' }}>
+                                            Step {idx + 1}
+                                        </div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
                                             <div style={{ flex: 1, marginRight: '10px' }}>
                                                 <label style={{ display: 'block', color: '#aaa', fontSize: '0.8em', marginBottom: '2px' }}>Action Type</label>
@@ -329,6 +366,44 @@ const ModeBuilder = ({ config, onSaveConfig }) => {
                     </div>
                 )}
             </div>
+
+            {/* Context Menu Overlay */}
+            {contextMenu && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: contextMenu.y,
+                        left: contextMenu.x,
+                        backgroundColor: '#222',
+                        border: '1px solid #555',
+                        borderRadius: '4px',
+                        zIndex: 1000,
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.5)',
+                        padding: '4px 0'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div
+                        onClick={() => {
+                            if (contextMenu.type === 'mode') deleteMode(contextMenu.id);
+                            if (contextMenu.type === 'action') deleteActionDef(contextMenu.id);
+                            setContextMenu(null);
+                        }}
+                        style={{
+                            padding: '8px 16px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            color: '#ff6b6b'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#333'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                        <span>🗑️</span> Delete
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

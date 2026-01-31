@@ -263,6 +263,7 @@ function App() {
         {view === 'dashboard' && (
           <Dashboard
             jobs={jobs}
+            config={config}
             engineStatus={engineStatus}
             onToggleEngine={() => engineStatus === 'running' ? stopEngine() : startEngine()}
           />

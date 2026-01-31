@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-const Dashboard = ({ jobs, engineStatus, onToggleEngine }) => {
+const Dashboard = ({ jobs, config, engineStatus, onToggleEngine }) => {
     const [showHistory, setShowHistory] = useState(false);
 
     // Process and sort jobs
@@ -28,12 +28,10 @@ const Dashboard = ({ jobs, engineStatus, onToggleEngine }) => {
             }
         });
 
-        // Sort Active: By Date (Assuming User wants FIFO or Newest? "Currently processed (by date)" usually means FIFO for queue.
-        // But for visibility, let's put Newest at top. Wait, user said "Currently processed... In Queue".
-        // If we assume Newest = ID is larger.
-        active.sort((a, b) => b.date - a.date); // Newest First
+        // Sort Active: Newest First (Descending Date)
+        active.sort((a, b) => b.date - a.date);
 
-        // Sort Done Today: By Time (Newest First)
+        // Sort Done Today: Newest First
         doneToday.sort((a, b) => b.date - a.date);
 
         // Sort History: Newest First
@@ -77,14 +75,14 @@ const Dashboard = ({ jobs, engineStatus, onToggleEngine }) => {
                 {activeJobs.length === 0 ? (
                     <EmptyState message="No active jobs running." />
                 ) : (
-                    activeJobs.map(job => <JobCard key={job.id} job={job} type="active" />)
+                    activeJobs.map(job => <JobCard key={job.id} job={job} config={config} type="active" />)
                 )}
             </Section>
 
             {/* Done Today Section */}
             {doneTodayJobs.length > 0 && (
                 <Section title="Done Today" count={doneTodayJobs.length}>
-                    {doneTodayJobs.map(job => <JobCard key={job.id} job={job} type="done" />)}
+                    {doneTodayJobs.map(job => <JobCard key={job.id} job={job} config={config} type="done" />)}
                 </Section>
             )}
 
@@ -101,7 +99,7 @@ const Dashboard = ({ jobs, engineStatus, onToggleEngine }) => {
 
                     {showHistory && (
                         <div style={{ marginTop: '15px' }}>
-                            {historyJobs.map(job => <JobCard key={job.id} job={job} type="history" />)}
+                            {historyJobs.map(job => <JobCard key={job.id} job={job} config={config} type="history" />)}
                         </div>
                     )}
                 </div>
@@ -127,9 +125,17 @@ const EmptyState = ({ message }) => (
     </div>
 );
 
-const JobCard = ({ job, type }) => {
+const JobCard = ({ job, config, type }) => {
     const filename = job.filepath.split('/').pop();
-    const statusInfo = getStatusInfo(job);
+    const statusInfo = getStatusInfo(job, config);
+    const modeName = getModeName(job.mode_id, config);
+
+    // Resolve Next Step Name
+    let nextStepName = null;
+    if (type === 'active' && job.pending_steps.length > 0 && config) {
+        const nextStepId = job.pending_steps[0];
+        nextStepName = getStepActionName(job.mode_id, nextStepId, config);
+    }
 
     return (
         <div style={{
@@ -149,7 +155,7 @@ const JobCard = ({ job, type }) => {
                 <div style={{ fontSize: '0.85em', color: '#aaa' }}>
                     {job.date.toLocaleDateString()} {job.date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     <span style={{ margin: '0 8px' }}>•</span>
-                    {job.mode_id.replace('mode_', '').toUpperCase()}
+                    {modeName}
                 </div>
             </div>
 
@@ -165,9 +171,9 @@ const JobCard = ({ job, type }) => {
                 }}>
                     {statusInfo.text}
                 </div>
-                {type === 'active' && job.pending_steps.length > 0 && (
+                {nextStepName && (
                     <div style={{ fontSize: '0.8em', color: '#888', marginTop: '4px' }}>
-                        Next: {job.pending_steps[0].split('_')[1] || 'Process'}
+                        Next: {nextStepName}
                     </div>
                 )}
             </div>
@@ -191,7 +197,25 @@ const parseJobDate = (jobId) => {
     return new Date();
 };
 
-const getStatusInfo = (job) => {
+const getModeName = (modeId, config) => {
+    if (!config || !config.modes) return modeId.replace('mode_', '').toUpperCase();
+    const mode = config.modes.find(m => m.id === modeId);
+    return mode ? mode.name : modeId;
+};
+
+const getStepActionName = (modeId, stepId, config) => {
+    if (!config || !config.modes || !config.action_definitions) return stepId;
+    const mode = config.modes.find(m => m.id === modeId);
+    if (!mode) return stepId;
+
+    const step = (mode.steps || []).find(s => s.id === stepId);
+    if (!step) return stepId;
+
+    const actionDef = config.action_definitions[step.action_def_id];
+    return actionDef ? actionDef.name : stepId;
+};
+
+const getStatusInfo = (job, config) => {
     if (job.status === 'error') {
         return { text: 'Error', color: '#fff', bg: '#d32f2f' };
     }
@@ -201,11 +225,24 @@ const getStatusInfo = (job) => {
 
     // Processing / Active Logic
     const totalCompleted = job.completed_steps ? job.completed_steps.length : 0;
-    // We assume there's always at least one step if it's active.
-    // Step count is 1-based index (Completed + 1)
-    const currentStep = totalCompleted + 1;
+    const currentStepIndex = totalCompleted; // 0-based index for next step
+    const currentStepNumber = currentStepIndex + 1;
 
-    return { text: `Step ${currentStep}`, color: '#fff', bg: '#1976d2' };
+    // Attempt to resolve current step name
+    let stepName = "";
+    if (config && job.pending_steps && job.pending_steps.length > 0) {
+        // The first pending step is the "Current" one being processed (or about to be)
+        // Actually, if it's processing, the engine pops it? 
+        // No, engine keeps it in pending until done. 
+        // Wait, check engine logic. 
+        // Engine: starts processing step -> DOES NOT pop. 
+        // Finishes -> moves to completed.
+        // So pending_steps[0] is indeed the current step.
+        const currentStepId = job.pending_steps[0];
+        stepName = " - " + getStepActionName(job.mode_id, currentStepId, config);
+    }
+
+    return { text: `Step ${currentStepNumber}${stepName}`, color: '#fff', bg: '#1976d2' };
 };
 
 export default Dashboard;
