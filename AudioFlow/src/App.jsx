@@ -41,6 +41,7 @@ function App() {
     ];
 
     // Poll State
+    loadState(); // Initial load
     const interval = setInterval(loadState, 2000);
 
     return () => {
@@ -66,6 +67,7 @@ function App() {
 
     try {
       const paths = await window.electronAPI.getAppPaths();
+      console.log("Renderer: App Paths:", paths);
 
       // AUTO-SEED LOGIC:
       // 1. Check if settings.json exists (User Settings)
@@ -101,16 +103,13 @@ function App() {
   };
 
   const loadState = async () => {
-    if (!onboardingComplete) return;
     try {
-      const paths = await window.electronAPI.getAppPaths();
-      if (window.fsAPI.exists(paths.statePath)) {
-        const stateData = await window.fsAPI.readFile(paths.statePath);
-        const state = JSON.parse(stateData);
-        setJobs(state.active_jobs || {});
+      const state = await window.electronAPI.getState();
+      if (state && state.active_jobs) {
+        setJobs(state.active_jobs);
       }
     } catch (e) {
-      // ignore read error
+      console.error("Renderer: Failed to load state", e);
     }
   };
 

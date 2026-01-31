@@ -64,6 +64,20 @@ ipcMain.handle('get-app-paths', () => {
     };
 });
 
+ipcMain.handle('get-state', async () => {
+    const userData = app.getPath('userData');
+    const statePath = path.join(userData, 'state.json');
+    try {
+        if (fs.existsSync(statePath)) {
+            const data = fs.readFileSync(statePath, 'utf-8');
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        console.error("Failed to read state:", e);
+    }
+    return { active_jobs: {} };
+});
+
 ipcMain.handle('start-engine', async (event, { pythonPath }) => {
     if (pythonProcess) {
         console.log('Engine already running. Restarting...');

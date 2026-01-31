@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
     getAppPaths: () => ipcRenderer.invoke('get-app-paths'),
+    getState: () => ipcRenderer.invoke('get-state'),
     startEngine: (pythonPath) => ipcRenderer.invoke('start-engine', { pythonPath }),
     stopEngine: () => ipcRenderer.invoke('stop-engine'),
     checkPython: (path) => ipcRenderer.invoke('check-python', path),

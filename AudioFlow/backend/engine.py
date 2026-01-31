@@ -86,7 +86,7 @@ class AudioFlowEngine:
         """Called by watchdog when a new file is detected."""
         # Check if already processed
         if self.state_manager.is_file_processed(file_path):
-             logging.info(f"Skipping already processed file: {os.path.basename(file_path)}")
+             # logging.info(f"Skipping already processed file: {os.path.basename(file_path)}")
              return
 
         # Check against modes
