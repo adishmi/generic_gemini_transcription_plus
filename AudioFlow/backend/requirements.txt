@@ -1,0 +1,7 @@
+watchdog
+google-genai
+pydub
+jinja2
+python-dotenv
+ffmpeg-python
+audioop-lts
