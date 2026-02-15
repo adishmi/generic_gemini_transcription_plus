@@ -243,6 +243,10 @@ class AudioFlowEngine:
         action_type = action_def["type"]
         model = action_def.get("model", "gemini-1.5-flash") # Default
         
+        # Determine base filename without extension
+        original_filename = os.path.basename(job['filepath'])
+        base_name = os.path.splitext(original_filename)[0]
+
         if action_type == "transcription":
             # Parallel Transcription
             tasks = []
@@ -269,7 +273,9 @@ class AudioFlowEngine:
                 full_text += adjusted_text + "\n"
 
             # Save to file
-            filename = f"{os.path.basename(job['filepath'])}_Transcription.txt"
+            # Use action name as suffix, replacing spaces with underscores
+            action_suffix = action_def.get("name", "Transcription").replace(" ", "_")
+            filename = f"{base_name}_{action_suffix}.txt"
             out_path = os.path.join(output_dir, filename)
             with open(out_path, 'w') as f:
                 f.write(full_text)
@@ -295,8 +301,9 @@ class AudioFlowEngine:
                  )
              
              # Save
-             suffix = action_def.get("id", action_type).replace("_", "") # Use ID (e.g. 'linkedin') as suffix
-             filename = f"{os.path.basename(job['filepath'])}_{suffix}.txt"
+             # Use action name as suffix, replacing spaces with underscores
+             action_suffix = action_def.get("name", action_type).replace(" ", "_")
+             filename = f"{base_name}_{action_suffix}.txt"
              out_path = os.path.join(output_dir, filename)
              with open(out_path, 'w') as f:
                  f.write(response_text)
