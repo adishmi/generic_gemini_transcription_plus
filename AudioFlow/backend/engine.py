@@ -28,6 +28,9 @@ class AudioFlowEngine:
         """Starts the engine: loads state, resumes jobs, starts watchdog."""
         logging.info("Starting AudioFlow Engine...")
         
+        # Initialize lock for job creation to prevent race conditions
+        self.job_creation_lock = threading.Lock()
+        
         # Load config to get watched folders
         config = self.state_manager.load_config()
         watched_folders = config.get("watched_folders", [])
@@ -84,10 +87,11 @@ class AudioFlowEngine:
 
     def handle_new_file(self, file_path):
         """Called by watchdog when a new file is detected."""
-        # Check if already processed
-        if self.state_manager.is_file_processed(file_path):
-             # logging.info(f"Skipping already processed file: {os.path.basename(file_path)}")
-             return
+        with getattr(self, 'job_creation_lock', threading.Lock()):
+            # Check if already processed
+            if self.state_manager.is_file_processed(file_path):
+                 # logging.info(f"Skipping already processed file: {os.path.basename(file_path)}")
+                 return
 
         # Check against modes
         config = self.state_manager.load_config()
@@ -328,6 +332,7 @@ class NewFileHandler(FileSystemEventHandler):
     def __init__(self, engine):
         self.engine = engine
         self._stable_timers = {}
+        self._timer_lock = threading.Lock()
 
     def on_created(self, event):
         if event.is_directory or not event.src_path.lower().endswith('.mp3'): # Just mp3/m4a support
@@ -340,12 +345,16 @@ class NewFileHandler(FileSystemEventHandler):
              return
 
         logging.info(f"Detected new file: {event.src_path}")
-        # Debounce/Check stability logic
-        # For simplicity in this step, assume stable or use a delay.
-        # Impl: Wait 2 seconds then check size stability.
-        # Since this is a callback, we shouldn't block. We can spawn a thread or task in engine.
-        threading_timer = threading.Timer(2.0, self.check_stability, args=[event.src_path])
-        threading_timer.start()
+        
+        with self._timer_lock:
+             # If a timer already exists, cancel it to avoid duplicates
+             if event.src_path in self._stable_timers:
+                 self._stable_timers[event.src_path].cancel()
+             
+             # Start a new timer
+             timer = threading.Timer(2.0, self.check_stability, args=[event.src_path])
+             self._stable_timers[event.src_path] = timer
+             timer.start()
 
     def check_stability(self, path):
         # Initial check
@@ -354,11 +363,24 @@ class NewFileHandler(FileSystemEventHandler):
             time.sleep(1)
             size2 = os.path.getsize(path)
             if size1 == size2 and size1 > 0:
+                 with self._timer_lock:
+                     # Clean up timer
+                     if path in self._stable_timers:
+                         del self._stable_timers[path]
                  self.engine.handle_new_file(path)
             else:
                  # Retry
-                 threading.Timer(2.0, self.check_stability, args=[path]).start()
+                 with self._timer_lock:
+                     if path in self._stable_timers:
+                         del self._stable_timers[path]
+                     
+                     timer = threading.Timer(2.0, self.check_stability, args=[path])
+                     self._stable_timers[path] = timer
+                     timer.start()
         except FileNotFoundError:
+            with self._timer_lock:
+                 if path in self._stable_timers:
+                     del self._stable_timers[path]
             pass
 
 import threading
